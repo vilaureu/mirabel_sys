@@ -1,0 +1,21 @@
+[package]
+name = "mirabel_sys"
+version = "0.1.0"
+edition = "2021"
+publish = false
+authors = ["vilaureu"]
+
+[features]
+default = ["surena", "mirabel"]
+mirabel = ["surena"]
+surena = ["bindgen", "regex"]
+
+[build-dependencies.bindgen]
+version = "0.62"
+optional = true
+
+[build-dependencies.regex]
+version = "1.6"
+default-features = false
+features = ["std", "perf"]
+optional = true
