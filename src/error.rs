@@ -1,6 +1,6 @@
 //! Helpers for error handling in plugin APIs.
 
-use std::{fmt::Display, num::NonZeroU32};
+use std::{ffi::c_char, fmt::Display, num::NonZeroU32, ptr::null};
 
 use crate::{
     cstr, cstr_to_rust,
@@ -24,6 +24,16 @@ impl Default for ErrorString {
     #[inline]
     fn default() -> Self {
         ErrorString::None
+    }
+}
+
+impl From<&ErrorString> for *const c_char {
+    fn from(e: &ErrorString) -> Self {
+        match e {
+            ErrorString::None => null(),
+            ErrorString::Static(s) => (*s).into(),
+            ErrorString::Dynamic(s) => s.as_ptr(),
+        }
     }
 }
 
