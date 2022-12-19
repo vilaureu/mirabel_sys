@@ -115,7 +115,7 @@ pub struct EventGameLoadMethods<'l> {
     pub base: Event,
     // TODO: Provide safe wrapper for game_methods.
     pub methods: *const game_methods,
-    pub init_info: &'l GameInit,
+    pub init_info: GameInit<'l>,
 }
 
 impl<'l> EventGameLoadMethods<'l> {
@@ -123,7 +123,7 @@ impl<'l> EventGameLoadMethods<'l> {
         Self {
             base: Event::new(&event.base),
             methods: event.methods,
-            init_info: GameInit::from_ref(&event.init_info),
+            init_info: GameInit::new(&event.init_info),
         }
     }
 }

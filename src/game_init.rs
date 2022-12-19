@@ -1,151 +1,54 @@
 //! Wrapper around [`game_init`].
 
-use std::{
-    borrow::Borrow,
-    ffi::c_void,
-    mem::transmute,
-    ops::Deref,
-    ptr::{null, null_mut},
-};
+use std::slice::from_raw_parts;
 
 use crate::{
+    cstr_to_rust,
     sys::{
-        game_init, game_init_create_standard, sl_game_init_info_serializer,
+        game_init, GAME_INIT_SOURCE_TYPE_E_GAME_INIT_SOURCE_TYPE_DEFAULT as SOURCE_TYPE_DEFAULT,
+        GAME_INIT_SOURCE_TYPE_E_GAME_INIT_SOURCE_TYPE_SERIALIZED as SOURCE_TYPE_SERIALIZED,
         GAME_INIT_SOURCE_TYPE_E_GAME_INIT_SOURCE_TYPE_STANDARD as SOURCE_TYPE_STANDARD,
-        GSIT_E_GSIT_COPY, GSIT_E_GSIT_DESTROY, LS_ERR,
     },
-    ValidCStr,
 };
 
-// TODO: Provide safe wrapper for game_init internals.
-/// Wraps a valid [`game_init`].
-#[repr(transparent)]
-pub struct GameInit(game_init);
+/// Rust version of [`game_init`] borrowing the referenced data structures.
+#[derive(Debug, Copy, Clone)]
+pub enum GameInit<'l> {
+    Default,
+    Standard {
+        opts: Option<&'l str>,
+        legacy: Option<&'l str>,
+        state: Option<&'l str>,
+    },
+    Serialized(&'l [u8]),
+}
 
-impl GameInit {
+impl<'l> GameInit<'l> {
     /// Create a new [`GameInit`] from a [`game_init`].
     ///
     /// # Safety
     /// The supplied `init_info` must be valid.
-    #[inline]
-    pub unsafe fn new(init_info: game_init) -> Self {
-        Self(init_info)
-    }
-
-    /// Create a new [`GameInit`] from a [`game_init`] by references.
-    ///
-    /// This is valid because [`GameInit`] is `repr(transparent)`.
-    ///
-    /// # Safety
-    /// The supplied `init_info` must be valid.
-    #[inline]
-    pub unsafe fn from_ref<'l>(init_info: &'l game_init) -> &'l Self {
-        transmute::<&'l game_init, &'l Self>(init_info)
-    }
-}
-
-impl Deref for GameInit {
-    type Target = game_init;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl ToOwned for GameInit {
-    type Owned = OwnedGameInit;
-
-    fn to_owned(&self) -> Self::Owned {
-        let original: *const game_init = &**self;
-        // Prevent having uninitialized memory by providing initialized memory
-        // to start with.
-        let mut copy = game_init::default();
-        let copy_ptr: *mut game_init = &mut copy;
-        unsafe {
-            // original is not actually mutated.
-            assert_ne!(
-                LS_ERR,
-                sl_game_init_info_serializer(
-                    GSIT_E_GSIT_COPY,
-                    original.cast_mut().cast::<c_void>(),
-                    copy_ptr.cast::<c_void>(),
-                    null_mut(),
-                    null_mut(),
-                )
-            );
-            OwnedGameInit::new(GameInit::new(copy))
-        }
-    }
-}
-
-/// An owned variant of [`GameInit`].
-///
-/// It will destroy the [`game_init`] on drop.
-pub struct OwnedGameInit(GameInit);
-
-impl OwnedGameInit {
-    /// Takes ownership of `init_info`.
-    ///
-    /// # Safety
-    /// The data pointed to by `init_info` must not be concurrently accessed nor
-    /// used after this [`OwnedGameInit`] is dropped.
-    #[inline]
-    unsafe fn new(init_info: GameInit) -> Self {
-        OwnedGameInit(init_info)
-    }
-
-    /// Clones the underlying [`game_init`] while forcing the supplied state.
-    pub fn clone_with_state(&self, state: Option<ValidCStr>) -> Self {
-        let (opts, legacy) = if self.source_type == SOURCE_TYPE_STANDARD {
-            unsafe { (self.source.standard.opts, self.source.standard.legacy) }
-        } else {
-            (null(), null())
-        };
-        let state = match state {
-            Some(s) => s.into(),
-            None => null(),
-        };
-
-        // Prevent having uninitialized memory by providing initialized memory
-        // to start with.
-        let mut copy = game_init::default();
-        let copy_ptr: *mut game_init = &mut copy;
-        unsafe {
-            game_init_create_standard(copy_ptr, opts, legacy, state);
-            OwnedGameInit::new(GameInit::new(copy))
-        }
-    }
-}
-
-impl Borrow<GameInit> for OwnedGameInit {
-    #[inline]
-    fn borrow(&self) -> &GameInit {
-        &self.0
-    }
-}
-
-impl Deref for OwnedGameInit {
-    type Target = GameInit;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.borrow()
-    }
-}
-
-impl Drop for OwnedGameInit {
-    fn drop(&mut self) {
-        let ptr: *mut game_init = &mut (self.0).0;
-        unsafe {
-            // Unclear how to handle errors of destroy here. Ignore them.
-            sl_game_init_info_serializer(
-                GSIT_E_GSIT_DESTROY,
-                ptr.cast::<c_void>(),
-                null_mut(),
-                null_mut(),
-                null_mut(),
-            );
+    pub unsafe fn new(init_info: &game_init) -> Self {
+        match init_info.source_type {
+            SOURCE_TYPE_DEFAULT => Self::Default,
+            SOURCE_TYPE_STANDARD => {
+                let source = init_info.source.standard;
+                Self::Standard {
+                    opts: cstr_to_rust(source.opts),
+                    legacy: cstr_to_rust(source.legacy),
+                    state: cstr_to_rust(source.state),
+                }
+            }
+            SOURCE_TYPE_SERIALIZED => {
+                let source = init_info.source.serialized;
+                let begin: *const u8 = source.buf_begin.cast::<u8>();
+                let end: *const u8 = source.buf_begin.cast::<u8>();
+                Self::Serialized(from_raw_parts(
+                    begin,
+                    end.offset_from(begin).try_into().unwrap(),
+                ))
+            }
+            _ => unreachable!("unexpected SOURCE_TYPE"),
         }
     }
 }
