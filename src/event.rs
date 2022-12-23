@@ -1,11 +1,13 @@
 //! Wrapper for the _mirabel_ event framework.
 
+pub use crate::{game_init::GameInit, sys::game_methods, sys::move_code, sys::player_id};
+
 use std::{
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
 };
 
-use crate::{game_init::GameInit, sys::*, ValidCStr};
+use crate::{sys::*, ValidCStr};
 
 /// Wrapper for an owned [`event_any`].
 ///
