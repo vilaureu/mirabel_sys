@@ -43,7 +43,11 @@ mod generate {
                 "includes/mirabel/imgui_c_thin.h",
                 "includes/mirabel/log.h",
             ]);
-            allowed_system.extend_from_slice(&["SDL2/SDL_events.h", "SDL2/SDL_video.h"]);
+            allowed_system.extend_from_slice(&[
+                "SDL2/SDL_events.h",
+                "SDL2/SDL_video.h",
+                "SDL2/SDL_mouse.h",
+            ]);
         }
 
         let mut builder = bindgen::Builder::default()
